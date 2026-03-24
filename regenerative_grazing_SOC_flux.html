@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Regenerative Grazing — SOC Flux (Studies, Original)</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: transparent;
+    color: #222;
+    padding: 1.5rem;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  h2 { font-size: 17px; font-weight: 500; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #666; margin-bottom: 1rem; }
+
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
+  .ctrl-lbl { font-size: 13px; color: #666; }
+  .ctrl-btn {
+    padding: 5px 13px; font-size: 13px; border-radius: 6px;
+    border: 1px solid #ccc; background: transparent; color: #333;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .ctrl-btn.active, .ctrl-btn:hover { background: #f0f0f0; }
+
+  .legend-row { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; color: #666; margin-bottom: 12px; }
+  .leg-item { display: flex; align-items: center; gap: 5px; }
+
+  .chart-wrap { position: relative; width: 100%; height: 440px; }
+
+  .tooltip {
+    position: absolute;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    pointer-events: none;
+    line-height: 1.6;
+    max-width: 230px;
+    z-index: 10;
+    display: none;
+    color: #222;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+
+  .cite-section {
+    margin-top: 1.25rem;
+    border-top: 1px solid #e5e5e5;
+    padding-top: 0.75rem;
+    font-size: 12px;
+    color: #666;
+    line-height: 1.7;
+    columns: 2;
+    column-gap: 1.5rem;
+  }
+  @media (max-width: 520px) { .cite-section { columns: 1; } }
+  .cite-section b { color: #333; }
+</style>
+</head>
+<body>
+
+<h2>SOC sequestration flux — regenerative vs. continuous grazing</h2>
+<p class="subtitle">One point per study &nbsp;·&nbsp; Original units &nbsp;·&nbsp; Continuous-grazing counterfactual</p>
+
+<div class="controls">
+  <span class="ctrl-lbl">Show:</span>
+  <button class="ctrl-btn active" onclick="toggleFilter('all',this)">All studies</button>
+  <button class="ctrl-btn" onclick="toggleFilter('sufficient',this)">Sufficient depth only</button>
+</div>
+
+<div class="legend-row" id="legend"></div>
+
+<div class="chart-wrap">
+  <canvas id="socChart"></canvas>
+  <div class="tooltip" id="tip"></div>
+</div>
+
+<div class="cite-section" id="citeTable"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const raw = [
+  {label:"1a", citation:"Alemu et al. 2019 \u2013 cross",         cat:3, x:3.09, soc:0.12,  depth:"30",          sufficient:true,  region:"North America"},
+  {label:"1b", citation:"Alemu et al. 2019 \u2013 long",          cat:4, x:3.89, soc:-0.13, depth:"30",          sufficient:true,  region:"North America"},
+  {label:"2",  citation:"Bartley et al. 2023",                     cat:3, x:2.99, soc:0.27,  depth:"Insufficient",sufficient:false, region:"Australia"},
+  {label:"3",  citation:"Cattle & Southorn 2010",                  cat:4, x:4.03, soc:0.89,  depth:"Insufficient",sufficient:false, region:"Australia"},
+  {label:"4",  citation:"Chan et al. 2010",                        cat:3, x:2.73, soc:0.07,  depth:"30",          sufficient:true,  region:"Australia"},
+  {label:"5",  citation:"Chen et al. 2015",                        cat:3, x:3.29, soc:-0.02, depth:"30",          sufficient:true,  region:"Other"},
+  {label:"6",  citation:"Conant et al. 2003",                      cat:3, x:2.98, soc:1.96,  depth:"50",          sufficient:true,  region:"North America"},
+  {label:"7",  citation:"Costa et al. 2022",                       cat:2, x:1.93, soc:5.25,  depth:"100",         sufficient:true,  region:"South America"},
+  {label:"8",  citation:"Diaz De Ot\u00e1lora et al. 2021",        cat:2, x:1.72, soc:0.33,  depth:"Insufficient",sufficient:false, region:"Other"},
+  {label:"9",  citation:"Hillenbrand et al. 2019",                 cat:3, x:2.92, soc:-0.05, depth:"100",         sufficient:true,  region:"North America"},
+  {label:"10", citation:"Khatri-Chhetri et al. 2024",              cat:3, x:2.93, soc:-0.32, depth:"Insufficient",sufficient:false, region:"North America"},
+  {label:"11", citation:"Kurtz et al. 2020",                       cat:3, x:2.73, soc:2.14,  depth:"30",          sufficient:true,  region:"South America"},
+  {label:"12", citation:"Machmuller et al. 2015",                  cat:1, x:0.99, soc:7.10,  depth:"100",         sufficient:true,  region:"North America"},
+  {label:"13", citation:"McDonald et al. 2018",                    cat:3, x:3.20, soc:0.00,  depth:"Insufficient",sufficient:false, region:"Australia"},
+  {label:"14", citation:"Mehre et al. 2024",                       cat:3, x:3.14, soc:0.45,  depth:"50",          sufficient:true,  region:"North America"},
+  {label:"15", citation:"Moore et al. 2023",                       cat:2, x:2.07, soc:0.32,  depth:"Insufficient",sufficient:false, region:"North America"},
+  {label:"16", citation:"Mosier et al. 2021",                      cat:3, x:3.05, soc:0.49,  depth:"100",         sufficient:true,  region:"North America"},
+  {label:"17", citation:"Oliveira et al. 2021",                    cat:2, x:1.97, soc:-0.43, depth:"100",         sufficient:true,  region:"South America"},
+  {label:"18", citation:"Orgill et al. 2014",                      cat:3, x:3.28, soc:-0.58, depth:"50",          sufficient:true,  region:"Australia"},
+  {label:"19", citation:"Orgill et al. 2017",                      cat:3, x:2.70, soc:-0.06, depth:"30",          sufficient:true,  region:"Australia"},
+  {label:"20", citation:"Rowntree et al. 2020",                    cat:1, x:1.27, soc:2.29,  depth:"100",         sufficient:true,  region:"North America"},
+  {label:"21", citation:"Sanderman et al. 2015",                   cat:3, x:3.11, soc:-0.07, depth:"30",          sufficient:true,  region:"Australia"},
+  {label:"22", citation:"Sanjari et al. 2008",                     cat:4, x:3.81, soc:0.24,  depth:"Insufficient",sufficient:false, region:"Australia"},
+  {label:"23", citation:"Schatz et al. 2020",                      cat:4, x:3.90, soc:-0.03, depth:"Insufficient",sufficient:false, region:"Australia"},
+  {label:"24", citation:"Stanley et al. 2018",                     cat:1, x:1.09, soc:3.59,  depth:"30",          sufficient:true,  region:"North America"},
+  {label:"25", citation:"Stanley et al. 2025",                     cat:3, x:3.17, soc:0.31,  depth:"100",         sufficient:true,  region:"North America"},
+  {label:"26", citation:"Subedi et al. 2022",                      cat:4, x:3.99, soc:-0.30, depth:"20",          sufficient:true,  region:"North America"},
+  {label:"27", citation:"Teague et al. 2011",                      cat:3, x:3.10, soc:3.37,  depth:"100",         sufficient:true,  region:"North America"},
+  {label:"28", citation:"Teutscherov\u00e1 et al. 2021",           cat:2, x:2.30, soc:6.61,  depth:"20",          sufficient:true,  region:"South America"},
+];
+
+const boxStats = {
+  1: {min:2.29, max:7.10, median:3.59, q25:2.94,  q75:5.35},
+  2: {min:-0.43,max:6.61, median:5.25, q25:2.41,  q75:5.93},
+  3: {min:-0.58,max:3.37, median:0.12, q25:-0.05, q75:0.49},
+  4: {min:-0.30,max:-0.13,median:-0.21,q25:-0.26, q75:-0.17},
+};
+
+const catLabels = ["","Time-Series\nObservational","Comparative\nObservational","MQE\nCross-sectional","MQE\nLongitudinal"];
+
+const depthColors = {
+  "20":          {fill:"#7b3294", border:"#7b3294"},
+  "30":          {fill:"#c2a5cf", border:"#7b3294"},
+  "50":          {fill:"#a6dba0", border:"#008837"},
+  "100":         {fill:"#008837", border:"#008837"},
+  "Insufficient":{fill:"#ffffff", border:"#444444"},
+};
+
+let filterMode = "all";
+
+function getVisible() {
+  return filterMode === "all" ? raw : raw.filter(d => d.sufficient);
+}
+
+function buildLegend() {
+  const depths  = ["20","30","50","100","Insufficient"];
+  const names   = {"20":"20 cm","30":"30 cm","50":"50 cm","100":"100 cm","Insufficient":"Insufficient depth"};
+  document.getElementById("legend").innerHTML = depths.map(d => {
+    const c = depthColors[d];
+    return `<span class="leg-item">
+      <svg width="13" height="13" style="flex-shrink:0">
+        <rect x="1" y="1" width="11" height="11" rx="2"
+          fill="${c.fill}" stroke="${c.border}" stroke-width="1.5"/>
+      </svg>
+      <span>${names[d]}</span>
+    </span>`;
+  }).join("");
+}
+
+function buildCiteTable() {
+  document.getElementById("citeTable").innerHTML =
+    raw.map(d => `<div><b>${d.label}</b>: ${d.citation}</div>`).join("");
+}
+
+let chart;
+
+function buildChart() {
+  const ctx = document.getElementById("socChart").getContext("2d");
+  if (chart) chart.destroy();
+
+  const vis = getVisible();
+  const isDark = false;
+  const gridColor  = "rgba(0,0,0,0.08)";
+  const textColor  = "#444";
+  const zeroColor  = "rgba(0,0,0,0.55)";
+
+  const points = vis.map(d => ({...d, x: d.x, y: d.soc}));
+
+  const boxPlugin = {
+    id: "boxPlugin",
+    beforeDraw(ch) {
+      const {ctx: c, scales: {x, y}} = ch;
+      const vis2 = getVisible();
+      Object.entries(boxStats).forEach(([cat, s]) => {
+        const cn = parseInt(cat);
+        if (!vis2.some(d => d.cat === cn && d.sufficient)) return;
+        const xMid = x.getPixelForValue(cn);
+        const hw = 28;
+        c.save();
+        c.fillStyle = "rgba(0,0,0,0.06)";
+        c.fillRect(xMid - hw, y.getPixelForValue(s.max),
+                   hw * 2, y.getPixelForValue(s.min) - y.getPixelForValue(s.max));
+        if (cn === 3) {
+          c.fillStyle = "rgba(0,0,0,0.12)";
+          c.fillRect(xMid - hw, y.getPixelForValue(s.q75),
+                     hw * 2, y.getPixelForValue(s.q25) - y.getPixelForValue(s.q75));
+        }
+        c.strokeStyle = "rgba(0,0,0,0.75)";
+        c.lineWidth = 1.5;
+        c.beginPath();
+        c.moveTo(xMid - hw, y.getPixelForValue(s.median));
+        c.lineTo(xMid + hw, y.getPixelForValue(s.median));
+        c.stroke();
+        c.restore();
+      });
+    }
+  };
+
+  const labelPlugin = {
+    id: "labelPlugin",
+    afterDraw(ch) {
+      const {ctx: c, scales: {x, y}} = ch;
+      ch.data.datasets[0].data.forEach(pt => {
+        c.save();
+        c.font = "11px sans-serif";
+        c.fillStyle = textColor;
+        c.textAlign = "center";
+        c.fillText(pt.label, x.getPixelForValue(pt.x) + 11, y.getPixelForValue(pt.y) - 8);
+        c.restore();
+      });
+    }
+  };
+
+  const zeroPlugin = {
+    id: "zeroPlugin",
+    beforeDraw(ch) {
+      const {ctx: c, scales: {x, y}, chartArea} = ch;
+      const yZ = y.getPixelForValue(0);
+      c.save();
+      c.strokeStyle = zeroColor;
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(chartArea.left, yZ);
+      c.lineTo(chartArea.right, yZ);
+      c.stroke();
+      c.restore();
+    }
+  };
+
+  chart = new Chart(ctx, {
+    type: "scatter",
+    data: {
+      datasets: [{
+        data: points,
+        pointBackgroundColor: points.map(p => depthColors[p.depth].fill),
+        pointBorderColor:     points.map(p => depthColors[p.depth].border),
+        pointBorderWidth:     points.map(p => p.sufficient ? 1.5 : 2),
+        pointRadius: 8,
+        pointHoverRadius: 10,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: {display: false},
+        tooltip: {
+          enabled: false,
+          external(context) {
+            const tip = document.getElementById("tip");
+            if (context.tooltip.opacity === 0) { tip.style.display = "none"; return; }
+            const item = context.tooltip.dataPoints?.[0]?.raw;
+            if (!item) return;
+            tip.style.display = "block";
+            tip.innerHTML = `<b>${item.label}: ${item.citation}</b><br>
+              SOC flux: ${item.soc.toFixed(2)} MgC ha\u207b\u00b9 yr\u207b\u00b9<br>
+              Depth: ${item.depth} cm<br>
+              Region: ${item.region}`;
+            tip.style.left = (context.tooltip.caretX + 14) + "px";
+            tip.style.top  = (context.tooltip.caretY - 10) + "px";
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: "linear",
+          min: 0.5, max: 4.7,
+          ticks: {
+            stepSize: 1,
+            callback: v => catLabels[v] || "",
+            color: textColor,
+            font: {size: 11},
+            maxRotation: 15,
+          },
+          grid: {display: false},
+          border: {color: "rgba(0,0,0,0.2)"}
+        },
+        y: {
+          min: -2, max: 8.5,
+          ticks: {
+            stepSize: 1,
+            color: textColor,
+            font: {size: 11},
+            callback: v => v.toFixed(1)
+          },
+          grid: {color: gridColor},
+          title: {
+            display: true,
+            text: "SOC sequestration (MgC ha\u207b\u00b9 yr\u207b\u00b9)",
+            color: textColor,
+            font: {size: 12}
+          },
+          border: {dash: [2, 2]}
+        }
+      }
+    },
+    plugins: [boxPlugin, labelPlugin, zeroPlugin]
+  });
+}
+
+function toggleFilter(mode, btn) {
+  filterMode = mode;
+  document.querySelectorAll(".ctrl-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  buildChart();
+}
+
+buildLegend();
+buildCiteTable();
+buildChart();
+
+function sendHeight() {
+  window.parent.postMessage({type: "resize", height: document.body.scrollHeight}, "*");
+}
+new ResizeObserver(sendHeight).observe(document.body);
+sendHeight();
+</script>
+</body>
+</html>
